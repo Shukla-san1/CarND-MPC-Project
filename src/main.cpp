@@ -91,6 +91,36 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          // Type casting ptsx and ptsy from vector to eign vector
+
+          Eigen::VectorXd x_temp = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
+          Eigen::VectorXd y_temp = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());
+          auto coeffs = polyfit(x_temp, y_temp, x_temp.size() - 1);
+
+          cout << "Coeffs Size :"<< coeffs.size() << endl;
+
+          for (unsigned int i =0 ; i < coeffs.size() ; i++)
+          {
+              cout << coeffs[i] << endl;
+          }
+
+
+          // calculate cte
+          double cte =  0.0 ;
+          cte = polyeval(coeffs, px) - py;
+
+          // calculate epsi
+
+          double epsi =  0.0 ;
+          epsi = psi - atan(coeffs[1] + (2 * coeffs[2] * px) + (3 * coeffs[3] * px * px) + (4 * coeffs[4] * px * px *px) + (5* coeffs[5] * px * px *px *px));
+
+          //cout << "Vehicle Orientation :" << psi << endl;
+
+          // Define the state vector
+          Eigen::VectorXd state(6);
+          state << px, py, psi, v, cte, epsi;
+
+
 
           /*
           * TODO: Calculate steering angle and throttle using MPC.
@@ -98,8 +128,11 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          auto vars = mpc.Solve(state, coeffs);
+
+
+          double steer_value = -1*vars[6]/deg2rad(25);
+          double throttle_value = vars[7];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
