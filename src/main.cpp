@@ -98,7 +98,19 @@ int main() {
           double psi = j[1]["psi"];
           double v = mile2km(j[1]["speed"]);
 
-          // convert from map to vehicle co-ordinate
+          //Added new code
+          double delta = j[1]["steering_angle"];
+          double acceleration = j[1]["throttle"];
+
+
+          // predict state in 100ms
+          double latency = 0.1;
+          px += v*cos(psi)*latency;
+          py += v*sin(psi)*latency;
+          psi += -v*delta/Lf*latency;
+          v +=acceleration*latency;
+
+
 
           for (unsigned int i = 0 ; i < ptsx.size() ; i++ )
           {
@@ -109,19 +121,11 @@ int main() {
 
           }
 
-          // Type casting ptsx and ptsy from vector to eign vector
+          // Type casting ptsx and ptsy from vector to eigen vector
 
           Eigen::VectorXd x_temp = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
           Eigen::VectorXd y_temp = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());
 
-/*
-          double* ptrx = &ptsx[0];
-          Eigen::Map<Eigen::VectorXd> ptsx_transform(ptrx , 6);
-
-          double* ptry = &ptsy[0];
-          Eigen::Map<Eigen::VectorXd> ptsy_transform(ptry , 6);
-
-*/
           // calculating the polynomial coefficient
 
           auto coeffs = polyfit(x_temp, y_temp, 3);
@@ -137,32 +141,19 @@ int main() {
 
 
 
-          // calculate cte
+          // calculate cte ans epsi
+          double epsi =  psi -atan(coeffs[1]) ;
           double cte =  0.0 ;
           cte = polyeval(coeffs, 0);
-
-          // calculate epsi
-
-          double epsi =  0.0 ;
-          epsi =  -atan(coeffs[1]) ;
-
-          //cout << "Vehicle Orientation :" << psi << endl;
-
-          // Define the state vector
-
-          //double x_pred = v * cos(-psi) * 0.1 ;
-          //double y_pred = v * sin(-psi) * 0.1 ;
+          cte = cte + v*sin(epsi) *latency;
+          epsi = epsi + v * delta/Lf * latency;
 
           Eigen::VectorXd state(6);
-          //state << x_pred, y_pred, 0, v, cte, epsi;
+
           state << 0, 0, 0, v, cte, epsi;
 
-          /*
-          * TODO: Calculate steering angle and throttle using MPC.
-          *
-          * Both are in between [-1, 1].
-          *
-          */
+
+
           double steer_value;
           double throttle_value;
 
@@ -199,13 +190,6 @@ int main() {
           }
 
 
-          /*
-          for(unsigned int i = 0 ; i < ptsx.size() ; i++ )
-		   {
-			  next_x_vals.push_back(x_temp[i]);
-			  next_y_vals.push_back(y_temp[i]);
-		   }
-		*/
 
           //Display the MPC predicted trajectory
           vector<double> mpc_x_vals;
