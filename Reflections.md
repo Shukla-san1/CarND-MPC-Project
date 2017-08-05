@@ -1,126 +1,111 @@
 # CarND-Controls-MPC
 Self-Driving Car Engineer Nanodegree Program
 
----
+## Project Description
+* The project is to implement Model Predictive Control (MPC) to drive the car around the track in udacity simulator. The simulator provide a feed of value containing the position of the car (px, py), its speed (v) and heading direction (psi). Additionally it also provide the coordinates of waypoints along a reference trajectory that the car is to follow. All the coordinate provided in global coordinate system.  
+* Our goal in this project to drive the car around the track by using MPC algorithm which main goal is to minimize the difference between a predicted value and a reference value. The MPC calculate the trajectory, actuations (steering angle and throttel) and sends back to the simulator to drive the car.  
+* MPC involves simulating different actuator inputs and predicting resultant trajectory and selecting the trajectory with minimum cost. We are going to use only the immediate MPC predicts value  and feed these value to actuators ( through away rest).  Actuators brings the vehicle to a new state and then repeat the process.  
 
-## Dependencies
+## The Model :
+The vehicle model used in this project is a kinematic bicycle model. It neglects all dynamical effects such as inertia, friction and torque. The model takes changes of heading direction into account and is thus non-linear.  
+* The model's state has 6 different values: 
+ * px: position in X
+ * py: position in Y
+ * psi: car's heading direction
+ * v: velocity 
+ * cte: cross track error
+ * epsi: error psi  
+* The model has also 2 actuators :
+ * steering angle (delta)
+ * throttle (a)  
+#### The model equations:  
 
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-    Some function signatures have changed in v0.14.x. See [this PR](https://github.com/udacity/CarND-MPC-Project/pull/3) for more details.
-* Fortran Compiler
-  * Mac: `brew install gcc` (might not be required)
-  * Linux: `sudo apt-get install gfortran`. Additionall you have also have to install gcc and g++, `sudo apt-get install gcc g++`. Look in [this Dockerfile](https://github.com/udacity/CarND-MPC-Quizzes/blob/master/Dockerfile) for more info.
-* [Ipopt](https://projects.coin-or.org/Ipopt)
-  * Mac: `brew install ipopt`
-       +  Some Mac users have experienced the following error:
-       ```
-       Listening to port 4567
-       Connected!!!
-       mpc(4561,0x7ffff1eed3c0) malloc: *** error for object 0x7f911e007600: incorrect checksum for freed object
-       - object was probably modified after being freed.
-       *** set a breakpoint in malloc_error_break to debug
-       ```
-       This error has been resolved by updrading ipopt with
-       ```brew upgrade ipopt --with-openblas```
-       per this [forum post](https://discussions.udacity.com/t/incorrect-checksum-for-freed-object/313433/19).
-  * Linux
-    * You will need a version of Ipopt 3.12.1 or higher. The version available through `apt-get` is 3.11.x. If you can get that version to work great but if not there's a script `install_ipopt.sh` that will install Ipopt. You just need to download the source from the Ipopt [releases page](https://www.coin-or.org/download/source/Ipopt/) or the [Github releases](https://github.com/coin-or/Ipopt/releases) page.
-    * Then call `install_ipopt.sh` with the source directory as the first argument, ex: `sudo bash install_ipopt.sh Ipopt-3.12.1`. 
-  * Windows: TODO. If you can use the Linux subsystem and follow the Linux instructions.
-* [CppAD](https://www.coin-or.org/CppAD/)
-  * Mac: `brew install cppad`
-  * Linux `sudo apt-get install cppad` or equivalent.
-  * Windows: TODO. If you can use the Linux subsystem and follow the Linux instructions.
-* [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page). This is already part of the repo so you shouldn't have to worry about it.
-* Simulator. You can download these from the [releases tab](https://github.com/udacity/self-driving-car-sim/releases).
-* Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
+![Model- Equation](Model_Equation.png)
+
+where :
+Lf - the distance between the center of mass of the vehicle and the front wheels.
+
+The vehicle model can be found in the class FG_eval.
+
+## Timestep Length and Elapsed Duration (N & dt) :
+* Timestep length `N` and elapsed duration `dt` determine the prediction horizon 
+* `T = N * dt`. The longer prediction horizon the smoother controller.
+* Short prediction horizon causes less accurate, more responsive behavior of controller. 
+* I tried various combination of N (7, 10, 15, 20 and 25 ) and  dt (0.01, 0.02, 0.05 and 0.1) to find the optimum value for car drive smooth on sharp curve.
+* After some experiments I have chosen the final values of 
+	 * N = 20 
+	 * dt = 0.05
+* The car drives smoothly around the track with velocity up to 40 mph.
+* If i increase the speed beyond 40, the car is too wobbly and goes out of the track.
+
+## Polynomial Fitting and MPC Preprocessing :
+
+### MPC PreProcessing :
+* The waypoint of car reference trajectory given in global/map coordinate system. 
+* These Waypoints are transformed to vehicle coordinate system by translation and rotation. 
+* This transformation allows to perform calculations consistently in vehicle coordinate system. The code is as below :  
+
+         // convert from map to vehicle co-ordinate
+          for (unsigned int i = 0 ; i < ptsx.size() ; i++ )
+          {
+        	  double shift_x = ptsx[i] - px ;
+        	  double shift_y = ptsy[i] - py ;
+        	  ptsx[i] = (shift_x * cos(0-psi) - shift_y * sin(0-psi));
+        	  ptsy[i] = (shift_x * sin(0-psi) + shift_y * cos(0-psi));
+
+          }
+* ptsx[i] , ptsy[i] are the new waypoint coordinates in vehicle coordinate system.  
+* Such transformation allows us to set the current car position and orientation to the value `0`because now the car is located at the origin of coordinate system. 
+* That is why we can set the initial state as follows:  
+
+   `state << 0, 0, 0, v, cte, epsi`  
+
+### Polynomial Fitting :
+* Once the waypoints are in vehicle coordinate system, A third order polynomial is then fitted .  
+ Code as below:
+ 
+         // Type casting ptsx and ptsy from vector to eign vector
+
+          Eigen::VectorXd x_temp = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
+          Eigen::VectorXd y_temp = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());
 
 
-## Basic Build Instructions
+          // calculating the polynomial coefficient
+          auto coeffs = polyfit(x_temp, y_temp, 3);
 
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./mpc`.
+## Model Predictive Control with Latency
+Additional latency of 100ms is artificially added before sending actuations to the simulator. If we wouldn't handle the latency problem in our controller then oscilations and generally poor trajectories can occur. 
+There are mutiple method by which we can incorporate latency into the model:  
+1. Predict the state forward at the latency time before feeding into the solver. This will take latency into consideration.  
+2. Averaged the first two or three actuations and use that to feed back into the simulator.  
+I choose option 1 . Here are my steps :
+a) First calculate the new car's new_px and new_py and new_psi at lentency time.  
 
-## Tips
+          // Latency consideration
+          double delta = j[1]["steering_angle"];
+          double acceleration = j[1]["throttle"];
+          const double latency = 0.1;
+          px =  px + v * cos(psi) * latency;
+          py =  py + v * sin(psi) * latency;
+          psi = psi + v * (-delta)/Lf * latency;
+          v = v + acceleration * latency;
+      
+b) Map the waypoints from global coordinates to new_vehicle coordinates.
 
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.
+c) Calucate cte and epsi at the beginning of the time step  
 
-## Editor Settings
+         // calculate cte
+          double cte =  0.0 ;
+          cte = polyeval(coeffs, 0);
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+          // calculate epsi
+          double epsi =  0.0 ;
+          epsi = -atan(coeffs[1]) ;
+d) Now calucate update cet and epsi by incorporate the effect of latency.  
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
-
-## Hints!
-
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+          // Taking consideration of simulator latency for cte and epsi
+          cte = cte + v * sin(epsi) * latency;
+          epsi = epsi + v * delta/Lf * latency;
+         
+e) Then feed updated values of v, cte and epsi to solver.  
