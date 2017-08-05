@@ -46,7 +46,7 @@ The vehicle model can be found in the class FG_eval.
 * This transformation allows to perform calculations consistently in vehicle coordinate system. The code is as below :  
 
          // convert from map to vehicle co-ordinate
-          for (unsigned int i = 0 ; i < ptsx.size() ; i++ )
+       for (unsigned int i = 0 ; i < ptsx.size() ; i++ )
           {
         	  double shift_x = ptsx[i] - px ;
         	  double shift_y = ptsy[i] - py ;
@@ -54,6 +54,7 @@ The vehicle model can be found in the class FG_eval.
         	  ptsy[i] = (shift_x * sin(0-psi) + shift_y * cos(0-psi));
 
           }
+
 * ptsx[i] , ptsy[i] are the new waypoint coordinates in vehicle coordinate system.  
 * Such transformation allows us to set the current car position and orientation to the value `0`because now the car is located at the origin of coordinate system. 
 * That is why we can set the initial state as follows:  
@@ -85,11 +86,11 @@ a) First calculate the new car's new_px and new_py and new_psi at lentency time.
           // Latency consideration
           double delta = j[1]["steering_angle"];
           double acceleration = j[1]["throttle"];
-          const double latency = 0.1;
-          px =  px + v * cos(psi) * latency;
-          py =  py + v * sin(psi) * latency;
-          psi = psi + v * (-delta)/Lf * latency;
-          v = v + acceleration * latency;
+          double latency = 0.1;
+          px += v*cos(psi)*latency;
+          py += v*sin(psi)*latency;
+          psi += -v*delta/Lf*latency;
+          v +=acceleration*latency;
       
 b) Map the waypoints from global coordinates to new_vehicle coordinates.
 
@@ -105,7 +106,7 @@ c) Calucate cte and epsi at the beginning of the time step
 d) Now calucate update cet and epsi by incorporate the effect of latency.  
 
           // Taking consideration of simulator latency for cte and epsi
-          cte = cte + v * sin(epsi) * latency;
+          cte = cte + v*sin(epsi) *latency;
           epsi = epsi + v * delta/Lf * latency;
          
 e) Then feed updated values of v, cte and epsi to solver.  
